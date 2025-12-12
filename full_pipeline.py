@@ -295,6 +295,121 @@ def extract_france_ore(max_records: int = None) -> List[GridNode]:
     return nodes
 
 # ============================================================================
+# FRANCE: OpenStreetMap (Transmission with coordinates)
+# ============================================================================
+
+def extract_france_osm(max_records: int = None) -> List[GridNode]:
+    """Extract French substations from OpenStreetMap (to get coordinates RTE doesn't provide)."""
+    nodes = []
+
+    print("  [FR] Fetching OpenStreetMap substations (for coordinates)...")
+
+    # Overpass query for French substations
+    query = """
+    [out:json][timeout:180];
+    area["ISO3166-1"="FR"]->.france;
+    (
+      node["power"="substation"](area.france);
+      way["power"="substation"](area.france);
+      relation["power"="substation"](area.france);
+    );
+    out center tags;
+    """
+
+    try:
+        response = requests.post(OVERPASS_API, data={'data': query}, timeout=200)
+        response.raise_for_status()
+        data = response.json()
+    except Exception as e:
+        print(f"    Error fetching OSM data: {e}")
+        return nodes
+
+    elements = data.get('elements', [])
+
+    for elem in elements:
+        try:
+            tags = elem.get('tags', {})
+
+            # Get coordinates
+            if elem['type'] == 'node':
+                lon, lat = elem.get('lon'), elem.get('lat')
+            else:
+                center = elem.get('center', {})
+                lon, lat = center.get('lon'), center.get('lat')
+
+            if not lon or not lat:
+                continue
+
+            # Parse voltage
+            voltage_str = tags.get('voltage', '')
+            v_max, v_min = None, None
+            v_classes = []
+
+            if voltage_str:
+                voltages = re.findall(r'(\d+)', voltage_str)
+                if voltages:
+                    voltages = [float(v)/1000 if float(v) > 1000 else float(v) for v in voltages]
+                    v_max = max(voltages)
+                    v_min = min(voltages)
+                    v_classes = list(set([classify_voltage(v) for v in voltages]))
+
+            # Determine network level based on voltage or type
+            substation_type = tags.get('substation', '')
+            if v_max and v_max >= 63:
+                level = NetworkLevel.TX
+            elif substation_type == 'transmission':
+                level = NetworkLevel.TX
+            elif substation_type == 'distribution':
+                level = NetworkLevel.DX_PRIMARY
+            else:
+                level = NetworkLevel.DX_PRIMARY
+
+            # Determine role
+            if v_max and v_max >= 200:
+                role = SubstationRole.INTERFACE_TX_DX
+            elif v_max and v_max >= 63:
+                role = SubstationRole.ZONE_SUBSTATION
+            else:
+                role = SubstationRole.DISTRIBUTION_SUBSTATION
+
+            name = tags.get('name', '') or tags.get('ref', '') or f"OSM_{elem['type']}_{elem['id']}"
+            operator = tags.get('operator', '') or tags.get('owner', '')
+
+            node = GridNode(
+                id_global=generate_global_id('FR', 'OSM', f"{elem['type']}_{elem['id']}"),
+                country=Country.FR,
+                source_primary='OSM',
+                source_rank=SourceRank.COMMUNITY,
+                name=name,
+                level_tx_dx=level,
+                substation_role=role,
+                operator_name=operator if operator else None,
+                operator_id=None,
+                voltage_kv_nominal_max=v_max,
+                voltage_kv_nominal_min=v_min,
+                voltage_classes=v_classes if v_classes else None,
+                voltage_quality_flag=VoltageQuality.NUMERIC_EXACT if v_max else VoltageQuality.UNKNOWN,
+                capacity_quality_flag=CapacityQuality.MISSING,
+                lon=lon,
+                lat=lat,
+                geom_quality_flag=GeomQuality.DERIVED_FROM_OSM,
+                id_source=f"{elem['type']}_{elem['id']}",
+                last_update=datetime.now(),
+                licence_code='ODbL',
+                notes=f"OSM substation type: {substation_type}" if substation_type else None,
+            )
+            nodes.append(node)
+
+            if max_records and len(nodes) >= max_records:
+                break
+
+        except Exception as e:
+            print(f"    Warning: Failed to transform OSM element: {e}")
+
+    print(f"    -> {len(nodes)} OSM substations (France)")
+    return nodes
+
+# ============================================================================
 # AUSTRALIA: Geoscience Australia NEI (Transmission)
 # ============================================================================
 
@@ -554,13 +669,14 @@ def run_full_pipeline(output_path: str = None, max_records_per_source: int = Non
     print("FRANCE")
     print("-" * 70)
 
-    # France Transmission (RTE)
-    france_tx = extract_france_rte(max_records=max_records_per_source)
-    all_nodes.extend(france_tx)
-
-    # France Distribution (Agence ORE)
+    # France Distribution (Agence ORE) - has coordinates
     france_dx = extract_france_ore(max_records=max_records_per_source)
     all_nodes.extend(france_dx)
+
+    # France Transmission + additional Distribution (OSM) - has coordinates
+    # Note: RTE official data lacks coordinates for security reasons, so we use OSM
+    france_osm = extract_france_osm(max_records=max_records_per_source)
+    all_nodes.extend(france_osm)
 
     # AUSTRALIA
     print("\n" + "-" * 70)
