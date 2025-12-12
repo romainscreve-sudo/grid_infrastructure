@@ -1,0 +1,17 @@
+[
+  {"id": "RTE_001", "nom_poste": "GRANDE ILE", "type_poste": "Poste de transformation", "tension": "400 kV / 225 kV", "geo_point_2d": {"lon": 4.8357, "lat": 45.7640}},
+  {"id": "RTE_002", "nom_poste": "ARAMON", "type_poste": "Poste de transformation", "tension": "400 kV / 225 kV", "geo_point_2d": {"lon": 4.6747, "lat": 43.8758}},
+  {"id": "RTE_003", "nom_poste": "TAVEL", "type_poste": "Poste de transformation", "tension": "400 kV / 225 kV", "geo_point_2d": {"lon": 4.7092, "lat": 44.0083}},
+  {"id": "RTE_004", "nom_poste": "TARASCON", "type_poste": "Poste de transformation", "tension": "225 kV / 63 kV", "geo_point_2d": {"lon": 4.6533, "lat": 43.8058}},
+  {"id": "RTE_005", "nom_poste": "FEUILLANE", "type_poste": "Poste de transformation", "tension": "225 kV / 90 kV", "geo_point_2d": {"lon": 5.7217, "lat": 45.1922}},
+  {"id": "RTE_006", "nom_poste": "ALBERTVILLE", "type_poste": "Poste de transformation", "tension": "400 kV / 225 kV", "geo_point_2d": {"lon": 6.3925, "lat": 45.6756}},
+  {"id": "RTE_007", "nom_poste": "VENISSIEUX", "type_poste": "Poste de transformation", "tension": "225 kV / 63 kV", "geo_point_2d": {"lon": 4.8867, "lat": 45.6958}},
+  {"id": "RTE_008", "nom_poste": "JONAGE", "type_poste": "Poste de transformation", "tension": "225 kV / 63 kV", "geo_point_2d": {"lon": 5.0403, "lat": 45.8006}},
+  {"id": "RTE_009", "nom_poste": "CUSSET", "type_poste": "Poste de transformation", "tension": "225 kV / 63 kV", "geo_point_2d": {"lon": 4.8747, "lat": 45.7850}},
+  {"id": "RTE_010", "nom_poste": "GENISSIAT", "type_poste": "Poste de transformation", "tension": "225 kV / 63 kV", "geo_point_2d": {"lon": 5.7722, "lat": 46.0425}},
+  {"id": "RTE_011", "nom_poste": "SIERENTZ", "type_poste": "Poste de transformation", "tension": "400 kV / 225 kV", "geo_point_2d": {"lon": 7.4533, "lat": 47.6553}},
+  {"id": "RTE_012", "nom_poste": "VIGY", "type_poste": "Poste de transformation", "tension": "400 kV / 225 kV", "geo_point_2d": {"lon": 6.3000, "lat": 49.2167}},
+  {"id": "RTE_013", "nom_poste": "BEZAUMONT", "type_poste": "Poste de transformation", "tension": "225 kV / 63 kV", "geo_point_2d": {"lon": 6.1028, "lat": 48.9236}},
+  {"id": "RTE_014", "nom_poste": "MERY SUR OISE", "type_poste": "Poste de transformation", "tension": "225 kV / 63 kV", "geo_point_2d": {"lon": 2.1847, "lat": 49.0603}},
+  {"id": "RTE_015", "nom_poste": "VILLEVAUDÉ", "type_poste": "Poste de transformation", "tension": "400 kV / 225 kV", "geo_point_2d": {"lon": 2.6597, "lat": 48.9378}}
+]
