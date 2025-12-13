@@ -304,6 +304,7 @@ def parse_rte_voltage(tension: str) -> List[float]:
 def transform_ore_records(records: List[Dict]) -> List[Substation]:
     """Transform Agence ORE records to Substation objects."""
     substations = []
+    seen_ids = set()
 
     for rec in records:
         name = rec.get('nom_ps') or rec.get('nom', '') or ''
@@ -313,11 +314,25 @@ def transform_ore_records(records: List[Dict]) -> List[Substation]:
         lat = geo.get('lat')
         lon = geo.get('lon')
 
-        # Generate ID from name + commune
+        # Generate unique ID - use coordinates hash when name is missing
         commune = rec.get('commune') or ''
         code_insee = rec.get('code_insee') or ''
-        name_safe = (name or 'unknown').replace(' ', '_')[:30]
+
+        if name:
+            name_safe = name.replace(' ', '_')[:30]
+        elif lat and lon:
+            # Use coordinate hash for unnamed stations
+            coord_hash = f"{lat:.5f}_{lon:.5f}".replace('.', '').replace('-', 'm')
+            name_safe = f"loc_{coord_hash}"
+        else:
+            name_safe = f"idx_{len(substations)}"
+
         sub_id = f"ORE_{code_insee}_{name_safe}"
+
+        # Ensure uniqueness
+        if sub_id in seen_ids:
+            sub_id = f"{sub_id}_{len(substations)}"
+        seen_ids.add(sub_id)
 
         # Postes sources by definition are HTB/HTA transformers
         # Default: 63kV -> 20kV (most common configuration)
@@ -363,11 +378,29 @@ def normalize_name(name: str) -> str:
     # Lowercase
     n = name.lower()
 
-    # Remove common prefixes
-    prefixes = ['poste ', 'ps ', 'poste source ', 'poste de ', 'sous-station ']
+    # Remove common prefixes (OSM style)
+    prefixes = [
+        'poste électrique de la ', 'poste électrique du ', 'poste électrique de l\'',
+        'poste électrique d\'', 'poste électrique de ', 'poste electrique de ',
+        'sous-station sncf de ', 'sous-station de ', 'sous station ',
+        'poste source ', 'poste de ', 'poste ', 'ps ',
+        'portique électrique de ', 'portique de ',
+    ]
     for p in prefixes:
         if n.startswith(p):
             n = n[len(p):]
+            break
+
+    # Handle RTE-style suffixes like "(LA)", "(LE)", "(LES)"
+    # Convert "DURANNE (LA)" to "LA DURANNE"
+    import re
+    suffix_match = re.search(r'\s*\((la|le|les|l\')\)\s*$', n, re.IGNORECASE)
+    if suffix_match:
+        article = suffix_match.group(1)
+        n = article + ' ' + n[:suffix_match.start()]
+
+    # Remove other parenthetical content like "(CLIENT)", "(S.N.C.F.)"
+    n = re.sub(r'\s*\([^)]*\)\s*', ' ', n)
 
     # Remove accents (simple approach)
     replacements = {
