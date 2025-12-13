@@ -319,6 +319,12 @@ def transform_ore_records(records: List[Dict]) -> List[Substation]:
         name_safe = (name or 'unknown').replace(' ', '_')[:30]
         sub_id = f"ORE_{code_insee}_{name_safe}"
 
+        # Postes sources by definition are HTB/HTA transformers
+        # Default: 63kV -> 20kV (most common configuration)
+        # Output is always 20kV (HTA standard in France)
+        default_voltage_in = 63.0
+        default_voltage_out = 20.0
+
         sub = Substation(
             id=sub_id,
             name=name,
@@ -334,6 +340,10 @@ def transform_ore_records(records: List[Dict]) -> List[Substation]:
             region=rec.get('region') or '',
             code_insee=code_insee,
             operator=rec.get('nom_grd') or '',
+            voltage_in_kv=default_voltage_in,
+            voltage_out_kv=default_voltage_out,
+            voltage_levels="63kV/20kV",
+            voltage_source="DEFAULT",
             last_updated=rec.get('date_maj') or datetime.now().isoformat(),
         )
         substations.append(sub)
@@ -564,92 +574,23 @@ def enrich_ore_with_osm(ore_substations: List[Substation], osm_substations: List
             ore.osm_match_distance_m = best_distance
             ore.substation_type = best_match.get('substation_type')
 
-            # Enrich voltage from OSM
-            if best_match['voltage_max_kv']:
+            # Enrich voltage_in from OSM only if it provides more specific info
+            # (e.g., 90kV or 225kV instead of default 63kV)
+            # Keep voltage_out at 20kV (standard HTA output for all postes sources)
+            if best_match['voltage_max_kv'] and best_match['voltage_max_kv'] != ore.voltage_in_kv:
                 ore.voltage_in_kv = best_match['voltage_max_kv']
-                ore.voltage_out_kv = best_match['voltage_min_kv']
-                ore.voltage_levels = best_match['voltage_levels']
+                # Keep voltage_out at 20kV unless OSM has a different MV level
+                osm_min = best_match.get('voltage_min_kv')
+                if osm_min and osm_min >= 10 and osm_min <= 33:  # Valid HTA range
+                    ore.voltage_out_kv = osm_min
+                ore.voltage_levels = f"{int(ore.voltage_in_kv)}kV/{int(ore.voltage_out_kv)}kV"
                 ore.voltage_source = "OSM"
                 voltage_enriched += 1
 
     print(f"  Postes sources matched to OSM: {matched}/{len(ore_substations)} ({100*matched/len(ore_substations):.1f}%)")
-    print(f"  Postes sources with voltage enriched: {voltage_enriched}")
+    print(f"  Postes sources with voltage upgraded from OSM: {voltage_enriched}")
 
     return ore_substations
-
-
-# =============================================================================
-# CAPARESEAU EXTRACTION
-# =============================================================================
-
-def fetch_capareseau_data() -> List[Dict]:
-    """
-    Attempt to fetch CAPARESEAU capacity data.
-
-    Note: CAPARESEAU doesn't have a public API. This function attempts
-    to extract data from available sources.
-    """
-    print("\n" + "="*60)
-    print("EXTRACTING CAPARESEAU CAPACITY DATA")
-    print("="*60)
-
-    # Try the capareseau.fr API (if available)
-    # This is a best-effort attempt
-
-    capareseau_data = []
-
-    # Method 1: Try direct API (may not work)
-    try:
-        # The actual CAPARESEAU site uses a map-based interface
-        # We'll try to find any available data endpoints
-        print("  Attempting to access CAPARESEAU data...")
-
-        # Check if there's an open data version on data.gouv.fr
-        datagouv_search = "https://www.data.gouv.fr/api/1/datasets/?q=capareseau"
-        resp = requests.get(datagouv_search, timeout=10)
-        if resp.status_code == 200:
-            results = resp.json().get('data', [])
-            print(f"  Found {len(results)} datasets on data.gouv.fr mentioning CAPARESEAU")
-            for ds in results[:3]:
-                print(f"    - {ds.get('title', 'Unknown')}")
-
-    except Exception as e:
-        print(f"  Could not access CAPARESEAU API: {e}")
-
-    # Method 2: Check for S3REnR data on regional sites
-    print("\n  Note: CAPARESEAU data typically requires manual extraction from:")
-    print("    - https://www.capareseau.fr (interactive map)")
-    print("    - S3REnR regional documents (PDF)")
-    print("    - Direct request to RTE/Enedis")
-
-    return capareseau_data
-
-
-def enrich_with_capareseau(substations: List[Substation], capareseau_data: List[Dict]) -> List[Substation]:
-    """Enrich substations with CAPARESEAU capacity data."""
-    if not capareseau_data:
-        print("  No CAPARESEAU data available for enrichment")
-        return substations
-
-    # Build lookup by normalized name
-    capa_lookup = {}
-    for rec in capareseau_data:
-        name = normalize_name(rec.get('nom', ''))
-        capa_lookup[name] = rec
-
-    enriched = 0
-    for sub in substations:
-        norm_name = normalize_name(sub.name)
-        if norm_name in capa_lookup:
-            capa = capa_lookup[norm_name]
-            sub.capacity_total_mw = capa.get('capacite_totale_mw')
-            sub.capacity_reserved_mw = capa.get('capacite_reservee_mw')
-            sub.capacity_available_mw = capa.get('capacite_disponible_mw')
-            sub.capacity_source = "CAPARESEAU"
-            enriched += 1
-
-    print(f"  Substations enriched with capacity data: {enriched}")
-    return substations
 
 
 # =============================================================================
@@ -779,10 +720,6 @@ def main():
     # Step 4: Enrich with OSM
     rte_subs = enrich_rte_with_osm(rte_subs, osm_subs)
     ore_subs = enrich_ore_with_osm(ore_subs, osm_subs)
-
-    # Step 5: Try to get CAPARESEAU data
-    capa_data = fetch_capareseau_data()
-    ore_subs = enrich_with_capareseau(ore_subs, capa_data)
 
     # Summary
     print_summary(rte_subs, ore_subs)
